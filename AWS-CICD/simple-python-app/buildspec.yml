@@ -1,0 +1,34 @@
+version: 0.2
+
+env:
+  parameter-store:
+    DOCKER_REGISTERY_USERNAME: /myapp/docker-credentials/username
+    DOCKER_REGISTERY_PASSWORD: /myapp/docker-credentials/password
+    DOCKER_REGISTERY_URL: /myapp/docker-registery/url
+  
+phases:
+  install:
+    runtime-versions:
+      python: 3.11
+  pre_build:
+    commands:
+      - echo "Installing dependencies..."
+      - pip install -r AWS-CICD/simple-python-app/requirements.txt
+  build:
+    commands:
+      - echo "Running tests..."
+      - cd AWS-CICD/simple-python-app
+      - echo "Building docker image"
+      - echo "$DOCKER_REGISTERY_PASSWORD" | docker login -u "$DOCKER_REGISTERY_USERNAME" --password-stdin "$DOCKER_REGISTERY_URL"
+      - docker build -t "$DOCKER_REGISTERY_URL/$DOCKER_REGISTERY_USERNAME/flask-app:latest" .
+      - docker push "$DOCKER_REGISTERY_URL/$DOCKER_REGISTERY_USERNAME/flask-app:latest" 
+  post_build:
+    commands:
+      - echo "Build is successful."
+      - pwd
+      - ls -R
+      
+artifacts:
+  files:
+    - '**/*'
+  base-directory: AWS-CICD/simple-python-app
