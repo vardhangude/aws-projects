@@ -1,23 +1,22 @@
-# Base image
-FROM python:3.8
+# Use an official Python runtime as a parent image
+FROM python:3.11-slim
 
 # Set the working directory inside the container
 WORKDIR /app
 
-# Copy the requirements file
+# Copy the requirements file first to leverage Docker cache
 COPY requirements.txt .
 
-# Install the project dependencies
-RUN pip install -r requirements.txt
+# Install any needed packages specified in requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy the application code into the container
+# Copy the rest of the application code into the container
 COPY . .
 
-# Expose the port the Flask application will be listening on
+# Expose port 5000 to the outside world
+# This is the "documentation" part you mentioned
 EXPOSE 5000
 
-# Set environment variables, if necessary
-# ENV MY_ENV_VAR=value
-
-# Run the Flask application
+# Define the command to run your app
+# This will execute: python app.py
 CMD ["python", "app.py"]
