@@ -1,0 +1,231 @@
+
+gudev@Vardhan MINGW64 ~/Documents/aws-projects (main)
+$ eks update-kubeconfig --name demo-cluster --region us-east-1
+bash: eks: command not found
+
+gudev@Vardhan MINGW64 ~/Documents/aws-projects (main)
+$ aws eks update-kubeconfig --name demo-cluster --region us-east-1
+Added new context arn:aws:eks:us-east-1:543583415063:cluster/demo-cluster to C:\Users\gudev\.kube\config
+
+gudev@Vardhan MINGW64 ~/Documents/aws-projects (main)
+$ eksctl create fargateprofile \
+    --cluster demo-cluster \
+    --region us-east-1 \
+    --name alb-sample-app \
+    --namespace game-2048
+2025-11-01 00:38:38 [ℹ]  creating Fargate profile "alb-sample-app" on EKS cluster "demo-cluster"
+2025-11-01 00:38:57 [ℹ]  created Fargate profile "alb-sample-app" on EKS cluster "demo-cluster"
+
+gudev@Vardhan MINGW64 ~/Documents/aws-projects (main)
+$ kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/aws-load-balancer-controller/v2.5.4/docs/examples/2048/2048_full.yaml
+namespace/game-2048 created
+deployment.apps/deployment-2048 created
+service/service-2048 created
+ingress.networking.k8s.io/ingress-2048 created
+
+gudev@Vardhan MINGW64 ~/Documents/aws-projects (main)
+$ kubectl get pods -n game-2048
+NAME                              READY   STATUS    RESTARTS   AGE
+deployment-2048-bdbddc878-2bvkz   1/1     Running   0          2m6s
+deployment-2048-bdbddc878-2m6rx   1/1     Running   0          2m6s
+deployment-2048-bdbddc878-5zljd   1/1     Running   0          2m6s
+deployment-2048-bdbddc878-7msgl   1/1     Running   0          2m6s
+deployment-2048-bdbddc878-k29tm   1/1     Running   0          2m6s
+
+gudev@Vardhan MINGW64 ~/Documents/aws-projects (main)
+$ kubectl get svc -n game-2048
+NAME           TYPE       CLUSTER-IP      EXTERNAL-IP   PORT(S)        AGE
+service-2048   NodePort   10.100.64.196   <none>        80:30221/TCP   2m31s
+
+gudev@Vardhan MINGW64 ~/Documents/aws-projects (main)
+$ kubectl get ingress -n game-2048
+NAME           CLASS   HOSTS   ADDRESS   PORTS   AGE
+ingress-2048   alb     *                 80      2m54s
+
+gudev@Vardhan MINGW64 ~/Documents/aws-projects (main)
+$ eksctl utils associate-iam-oidc-provider --cluster $cluster_name --approve
+Error: unable to describe cluster control plane: operation error EKS: DescribeCluster, https response error StatusCode: 400, RequestID: d3800a3a-0686-4a96-8420-a7d2adf567f4, api error InvalidParameterException: The parameter name contains invalid characters. It should conform to the regular expression "^[0-9A-Za-z][A-Za-z0-9-_]*"In other words, it should start with a number or letter, and can contain numbers, letters, dashes, and underscores.
+
+gudev@Vardhan MINGW64 ~/Documents/aws-projects (main)
+$ export cluster_name=demo-cluster
+
+gudev@Vardhan MINGW64 ~/Documents/aws-projects (main)
+$ oidc_id=$(aws eks describe-cluster --name $cluster_name --query "cluster.identity.oidc.issuer" --output text | cut -d '/' -f 5) 
+
+gudev@Vardhan MINGW64 ~/Documents/aws-projects (main)
+$ eksctl utils associate-iam-oidc-provider --cluster $cluster_name --approve
+2025-11-01 00:44:49 [ℹ]  will create IAM Open ID Connect provider for cluster "demo-cluster" in "us-east-1"
+2025-11-01 00:44:50 [✔]  created IAM Open ID Connect provider for cluster "demo-cluster" in "us-east-1"
+
+gudev@Vardhan MINGW64 ~/Documents/aws-projects (main)
+$ curl -O https://raw.githubusercontent.com/kubernetes-sigs/aws-load-balancer-controller/v2.11.0/docs/install/iam_policy.json
+  % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current
+                                 Dload  Upload   Total   Spent    Left  Speed
+100  8759  100  8759    0     0  12375      0 --:--:-- --:--:-- --:--:-- 12406
+
+gudev@Vardhan MINGW64 ~/Documents/aws-projects (main)
+$ aws iam create-policy \
+    --policy-name AWSLoadBalancerControllerIAMPolicy \
+    --policy-document file://iam_policy.json
+
+An error occurred (EntityAlreadyExists) when calling the CreatePolicy operation: A policy called AWSLoadBalancerControllerIAMPolicy already exists. Duplicate names are not allowed.
+
+gudev@Vardhan MINGW64 ~/Documents/aws-projects (main)
+$ aws iam create-policy     --policy-name AWSLoadBalancerControllerIAMPolicy     --policy-document file://iam_policy.json
+{
+    "Policy": {
+        "PolicyName": "AWSLoadBalancerControllerIAMPolicy",
+        "PolicyId": "ANPAX5EAYVML3HWTWJOKO",
+        "Arn": "arn:aws:iam::543583415063:policy/AWSLoadBalancerControllerIAMPolicy",
+        "Path": "/",
+        "DefaultVersionId": "v1",
+        "AttachmentCount": 0,
+        "PermissionsBoundaryUsageCount": 0,
+        "IsAttachable": true,
+        "CreateDate": "2025-10-31T19:17:36+00:00",
+        "UpdateDate": "2025-10-31T19:17:36+00:00"
+    }
+}
+
+
+gudev@Vardhan MINGW64 ~/Documents/aws-projects (main)
+$ eksctl create iamserviceaccount \
+  --cluster=demo-cluster \
+  --namespace=kube-system \
+  --name=aws-load-balancer-controller \
+  --role-name AmazonEKSLoadBalancerControllerRole \
+  --attach-policy-arn=arn:aws:iam::543583415063:policy/AWSLoadBalancerControllerIAMPolicy \
+  --approve
+2025-11-01 00:50:23 [ℹ]  1 iamserviceaccount (kube-system/aws-load-balancer-controller) was included (based on the include/exclude rules)
+2025-11-01 00:50:23 [!]  serviceaccounts that exist in Kubernetes will be excluded, use --override-existing-serviceaccounts to override
+2025-11-01 00:50:23 [ℹ]  1 task: {
+    2 sequential sub-tasks: {
+        create IAM role for serviceaccount "kube-system/aws-load-balancer-controller",
+        create serviceaccount "kube-system/aws-load-balancer-controller",
+    } }2025-11-01 00:50:23 [ℹ]  building iamserviceaccount stack "eksctl-demo-cluster-addon-iamserviceaccount-kube-system-aws-load-balancer-controller"
+2025-11-01 00:50:23 [ℹ]  deploying stack "eksctl-demo-cluster-addon-iamserviceaccount-kube-system-aws-load-balancer-controller"
+2025-11-01 00:50:23 [ℹ]  waiting for CloudFormation stack "eksctl-demo-cluster-addon-iamserviceaccount-kube-system-aws-load-balancer-controller"
+2025-11-01 00:50:55 [ℹ]  waiting for CloudFormation stack "eksctl-demo-cluster-addon-iamserviceaccount-kube-system-aws-load-balancer-controller"
+2025-11-01 00:50:56 [ℹ]  created serviceaccount "kube-system/aws-load-balancer-controller"
+
+gudev@Vardhan MINGW64 ~/Documents/aws-projects (main)
+$ helm repo add eks https://aws.github.io/eks-charts
+"eks" already exists with the same configuration, skipping
+
+gudev@Vardhan MINGW64 ~/Documents/aws-projects (main)
+$ helm repo update eks
+Hang tight while we grab the latest from your chart repositories...
+...Successfully got an update from the "eks" chart repository
+Update Complete. ⎈Happy Helming!⎈
+
+gudev@Vardhan MINGW64 ~/Documents/aws-projects (main)
+$ helm install aws-load-balancer-controller eks/aws-load-balancer-controller -n kube-system \
+  --set clusterName=demo-cluster \
+  --set serviceAccount.create=false \
+  --set serviceAccount.name=aws-load-balancer-controller \
+  --set region=us-east-1 \
+  --set vpcId=vpc-0b637bbc59e1bdc47
+NAME: aws-load-balancer-controller
+LAST DEPLOYED: Sat Nov  1 00:52:55 2025
+NAMESPACE: kube-system
+STATUS: deployed
+REVISION: 1
+TEST SUITE: None
+NOTES:
+AWS Load Balancer controller installed!
+
+gudev@Vardhan MINGW64 ~/Documents/aws-projects (main)
+$ kubectl get deployment -n kube-system aws-load-balancer-controller
+NAME                           READY   UP-TO-DATE   AVAILABLE   AGE
+aws-load-balancer-controller   0/2     2            0           55s
+
+gudev@Vardhan MINGW64 ~/Documents/aws-projects (main)
+$ kubectl get deployment -n kube-system aws-load-balancer-controller -w
+NAME                           READY   UP-TO-DATE   AVAILABLE   AGE
+aws-load-balancer-controller   2/2     2            2           80s
+gudev@Vardhan MINGW64 ~/Documents/aws-projects (main)
+$ kubectl get pods -n kube-system -w
+gudev@Vardhan MINGW64 ~/Documents/aws-projects (main)
+$ kubectl get pods -n kube-system -w
+NAME                                            READY   STATUS    RESTARTS   AGE
+aws-load-balancer-controller-784756db5f-5wlv5   1/1     Running   0          118s
+aws-load-balancer-controller-784756db5f-fjr9b   1/1     Running   0          118s
+coredns-775fb797cb-4c8dh                        1/1     Running   0          19m
+coredns-775fb797cb-ckqmf                        1/1     Running   0          19m
+metrics-server-75c7985757-kn68d                 0/1     Pending   0          24m
+metrics-server-75c7985757-nml5q                 0/1     Pending   0          24m
+metrics-server-75c7985757-nml5q                 0/1     Pending   0          25m
+metrics-server-75c7985757-kn68d                 0/1     Pending   0          26m
+
+
+gudev@Vardhan MINGW64 ~/Documents/aws-projects (main)
+$ kubectl edit deploy/aws-load-balancer-controller -n kube-system
+Edit cancelled, no changes made.
+
+gudev@Vardhan MINGW64 ~/Documents/aws-projects (main)
+$ kubectl get ingress -n game-2048
+NAME           CLASS   HOSTS   ADDRESS                                                                  PORTS   AGE
+ingress-2048   alb     *       k8s-game2048-ingress2-bcac0b5b37-603466179.us-east-1.elb.amazonaws.com   80      30m
+
+gudev@Vardhan MINGW64 ~/Documents/aws-projects (main)
+$ eksctl delete cluster --name demo-cluster --region us-east-1
+2025-11-01 01:29:52 [ℹ]  deleting EKS cluster "demo-cluster"
+2025-11-01 01:29:55 [ℹ]  deleting Fargate profile "alb-sample-app"
+2025-11-01 01:34:14 [ℹ]  deleted Fargate profile "alb-sample-app"
+2025-11-01 01:34:14 [ℹ]  deleting Fargate profile "fp-default"
+2025-11-01 01:36:25 [ℹ]  deleted Fargate profile "fp-default"
+2025-11-01 01:36:25 [ℹ]  deleted 2 Fargate profile(s)
+2025-11-01 01:36:28 [✔]  kubeconfig has been updated
+2025-11-01 01:36:28 [ℹ]  cleaning up AWS load balancers created by Kubernetes objects of Kind Service or Ingress
+Error: deadline surpassed waiting for AWS load balancers to be deleted: k8s-game2048-ingress2-bcac0b5b37
+
+gudev@Vardhan MINGW64 ~/Documents/aws-projects (main)
+$ 
+
+gudev@Vardhan MINGW64 ~/Documents/aws-projects (main)
+$ eksctl delete cluster --name demo-cluster --region us-east-1
+2025-11-01 01:46:37 [ℹ]  deleting EKS cluster "demo-cluster"
+2025-11-01 01:46:39 [ℹ]  deleted 0 Fargate profile(s)
+2025-11-01 01:46:42 [ℹ]  cleaning up AWS load balancers created by Kubernetes objects of Kind Service or Ingress
+
+
+gudev@Vardhan MINGW64 ~/Documents/aws-projects (main)
+$ eksctl delete cluster --name demo-cluster --region us-east-1
+2025-11-01 01:48:23 [ℹ]  deleting EKS cluster "demo-cluster"
+2025-11-01 01:48:26 [ℹ]  deleted 0 Fargate profile(s)
+2025-11-01 01:48:28 [ℹ]  cleaning up AWS load balancers created by Kubernetes objects of Kind Service or Ingress
+2025-11-01 01:48:41 [ℹ]  
+2 sequential tasks: {
+    2 sequential sub-tasks: {
+        2 sequential sub-tasks: {
+            delete IAM role for serviceaccount "kube-system/aws-load-balancer-controller",
+            delete serviceaccount "kube-system/aws-load-balancer-controller",
+        },
+        delete IAM OIDC provider,
+    }, delete cluster control plane "demo-cluster" [async]
+}
+2025-11-01 01:48:42 [ℹ]  will delete stack "eksctl-demo-cluster-addon-iamserviceaccount-kube-system-aws-load-balancer-controller"
+2025-11-01 01:48:42 [ℹ]  waiting for stack "eksctl-demo-cluster-addon-iamserviceaccount-kube-system-aws-load-balancer-controller" to get deleted
+2025-11-01 01:48:42 [ℹ]  waiting for CloudFormation stack "eksctl-demo-cluster-addon-iamserviceaccount-kube-system-aws-load-balancer-controller"
+2025-11-01 01:49:13 [ℹ]  waiting for CloudFormation stack "eksctl-demo-cluster-addon-iamserviceaccount-kube-system-aws-load-balancer-controller"
+2025-11-01 01:49:14 [ℹ]  deleted serviceaccount "kube-system/aws-load-balancer-controller"
+2025-11-01 01:49:15 [ℹ]  will delete stack "eksctl-demo-cluster-cluster"
+2025-11-01 01:49:16 [✔]  all cluster resources were deleted
+
+gudev@Vardhan MINGW64 ~/Documents/aws-projects (main)
+$
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
